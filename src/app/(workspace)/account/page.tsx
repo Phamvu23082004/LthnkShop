@@ -1,0 +1,3 @@
+import { requireSession } from "@/lib/auth/session";
+import { PasswordForm } from "@/components/password-form";
+export default async function Page(){const {profile}=await requireSession();return <div className="space-y-7"><h1 className="text-3xl font-semibold">Tài khoản của tôi</h1><section className="rounded-2xl border border-stone-200 bg-white p-6"><p className="font-medium">{profile.full_name}</p><p className="mt-2 break-all text-sm text-stone-600">{profile.email}</p><p className="mt-2 text-sm">{profile.role==="admin"?"Chủ shop":"Nhân viên"}</p></section><section className="rounded-2xl border border-stone-200 bg-white p-6"><PasswordForm/></section></div>;}
