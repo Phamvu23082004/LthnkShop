@@ -4,7 +4,7 @@ import { totals,statuses } from "../src/features/orders/domain";
 import { orderSchema } from "../src/features/orders/schema";
 import { parseFilters,pageHref,orderFiltersHref } from "../src/features/orders/filters";
 const line={product_name:"Set len",product_type:"diy_kit" as const,variant:"Kem",quantity:2,unit_price_vnd:205000};
-const input={request_id:"10000000-0000-4000-8000-000000000001",ordered_on:"2026-10-31",customer_name:"Khách",phone:"0901234567",address:"Hà Nội",channel:"Tại shop",shipping_vnd:30000,discount_vnd:10000,deposit_vnd:100000,paid_vnd:200000,due_on:null,notes:"",items:[line]};
+const input={request_id:"10000000-0000-4000-8000-000000000001",ordered_on:"2026-10-31",customer_name:"Khách",phone:"0901234567",address:"Hà Nội",sales_platform:"",buyer_link:"",shipping_vnd:30000,discount_vnd:10000,deposit_vnd:100000,due_on:null,notes:"",items:[line]};
 test("deposit is included in paid, not counted twice",()=>{
  assert.deepEqual(totals([line],30000,10000,100000,200000),{subtotal:410000,total:430000,remaining:230000});
  assert.throws(()=>totals([line],0,500000,0,0));
@@ -14,7 +14,7 @@ test("deposit is included in paid, not counted twice",()=>{
 });
 test("order validation enforces multiple lines, real dates and money bounds",()=>{
  assert.equal(orderSchema.safeParse({...input,items:[line,{...line,product_type:"finished_product"}]}).success,true);
- for(const patch of [{items:[]},{ordered_on:"2026-02-30"},{due_on:"2026-01-01"},{paid_vnd:999999},{items:[{...line,quantity:0}]},{shipping_vnd:0.5}])
+ for(const patch of [{items:[]},{ordered_on:"2026-02-30"},{due_on:"2026-01-01"},{deposit_vnd:999999},{paid_vnd:999999},{items:[{...line,quantity:0}]},{shipping_vnd:0.5}])
  assert.equal(orderSchema.safeParse({...input,...patch}).success,false);
 });
 test("calendar filters include boundaries and reject invalid ranges",()=>{

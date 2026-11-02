@@ -5,12 +5,12 @@ import { z } from "zod";
 
 
 import { createClient } from "@/lib/supabase/server";
-import { orderSchema,statusSchema } from "./schema";
+import { completedPaymentSchema,orderSchema,statusSchema } from "./schema";
 export type OrderActionState={error?:string;success?:string};
 function rpcError(code?:string){
  if(code==="40001")return "Đơn đã được thay đổi ở nơi khác. Tải lại trang trước khi lưu.";
  if(code==="42501")return "Bạn không còn quyền thay đổi đơn hàng.";
- if(code==="23514")return "Dữ liệu tiền không hợp lệ hoặc đơn đã hủy, không thể chỉnh sửa.";
+ if(code==="23514")return "Dữ liệu tiền không hợp lệ hoặc đơn đã hủy, không thể thực hiện thay đổi.";
  if(code==="PGRST202"||code==="PGRST205")return "Database chưa có chức năng đơn hàng. Cần chạy migration 202610310002_orders.sql.";
  return "Không thể lưu đơn. Kiểm tra dữ liệu/kết nối rồi thử lại.";
 }
@@ -22,17 +22,35 @@ export async function saveOrder(_:OrderActionState,form:FormData):Promise<OrderA
  const input=orderSchema.safeParse({
  request_id:form.get("request_id"),ordered_on:form.get("ordered_on")||null,customer_name:form.get("customer_name"),
  phone:form.get("phone"),address:form.get("address"),sales_platform:form.get("sales_platform")??"",buyer_link:form.get("buyer_link")??"",
- shipping_vnd:Number(form.get("shipping_vnd")),discount_vnd:Number(form.get("discount_vnd")),
- deposit_vnd:Number(form.get("deposit_vnd")),paid_vnd:Number(form.get("paid_vnd")),
+ shipping_vnd:Number(form.get("shipping_vnd"))*1000,discount_vnd:Number(form.get("discount_vnd"))*1000,
+ deposit_vnd:Number(form.get("deposit_vnd"))*1000,
  due_on:form.get("due_on")||null,notes:form.get("notes")||"",items
  });
  if(!input.success)return {error:input.error.issues[0]?.message==="Invalid input"?"Kiểm tra lại dữ liệu bắt buộc.":("Thông tin đơn chưa hợp lệ. "+input.error.issues[0]?.message)};
  const id=String(form.get("id")??"");const version=Number(form.get("version"));
  if(id&&(!z.uuid().safeParse(id).success||!Number.isInteger(version)||version<1))return {error:"Phiên bản đơn không hợp lệ."};
- const {data,error}=await client.rpc("save_order",{payload:input.data,target_id:id||null,expected_version:id?version:null});
+ const {data,error}=await client.rpc("save_order",{payload:{...input.data,paid_vnd:input.data.deposit_vnd},target_id:id||null,expected_version:id?version:null});
  if(error)return {error:rpcError(error.code)};
  revalidatePath("/orders");if(id)revalidatePath("/orders/"+id);
  redirect("/orders/"+data);
+}
+export async function updateCompletedPayment(_:OrderActionState,form:FormData):Promise<OrderActionState>{
+ const client=await mutationClient();
+ const input=completedPaymentSchema.safeParse({id:form.get("id"),version:Number(form.get("version")),paid_vnd:Number(form.get("paid_vnd"))*1000});
+ if(!input.success)return {error:"Số tiền thanh toán không hợp lệ."};
+ const {error}=await client.rpc("update_completed_order_payment",{target_id:input.data.id,expected_version:input.data.version,actual_paid_vnd:input.data.paid_vnd});
+ if(error)return {error:rpcError(error.code)};
+ revalidatePath("/orders");revalidatePath("/orders/"+input.data.id);
+ return {success:"Đã cập nhật số tiền khách thanh toán."};
+}
+export async function markOrderFullyPaid(_:OrderActionState,form:FormData):Promise<OrderActionState>{
+ const client=await mutationClient();
+ const id=String(form.get("id")??"");const version=Number(form.get("version"));
+ if(!z.uuid().safeParse(id).success||!Number.isInteger(version)||version<1)return {error:"Thông tin đơn hàng không hợp lệ."};
+ const {error}=await client.rpc("mark_order_fully_paid",{target_id:id,expected_version:version});
+ if(error)return {error:rpcError(error.code)};
+ revalidatePath("/orders");revalidatePath("/orders/"+id);
+ return {success:"Đã cập nhật trạng thái nhận đủ tiền."};
 }
 export async function changeStatus(_:OrderActionState,form:FormData):Promise<OrderActionState>{
  const client=await mutationClient();

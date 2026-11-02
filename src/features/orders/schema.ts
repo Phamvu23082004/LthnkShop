@@ -12,12 +12,13 @@ export const itemSchema=z.object({
 export const orderSchema=z.object({
  request_id:z.uuid(),ordered_on:dateSchema.nullable(),customer_name:z.string().trim().min(2).max(100),
  phone:z.string().trim().refine(v=>v===""||/^[0-9+(). -]{6,25}$/.test(v),"Số điện thoại không hợp lệ"),address:z.string().trim().refine(v=>v===""||(v.length>=3&&v.length<=500),"Địa chỉ không hợp lệ"),
- sales_platform:z.enum(["","tiktok","instagram"]).default(""),buyer_link:z.string().trim().max(2000).default("").refine(value=>{if(!value)return true;try{const url=new URL(value);return url.protocol==="http:"||url.protocol==="https:";}catch{return false;}} ,"URL phải bắt đầu bằng http:// hoặc https://."),shipping_vnd:money,discount_vnd:money,deposit_vnd:money,paid_vnd:money,
+ sales_platform:z.enum(["","tiktok","instagram"]).default(""),buyer_link:z.string().trim().max(2000).default("").refine(value=>{if(!value)return true;try{const url=new URL(value);return url.protocol==="http:"||url.protocol==="https:";}catch{return false;}} ,"URL phải bắt đầu bằng http:// hoặc https://."),shipping_vnd:money,discount_vnd:money,deposit_vnd:money,
  due_on:dateSchema.nullable(),notes:z.string().trim().max(2000),items:z.array(itemSchema).min(1).max(100)
 }).strict().superRefine((o,c)=>{
  if(o.due_on&&o.ordered_on&&o.due_on<o.ordered_on)c.addIssue({code:"custom",message:"Ngày hẹn không được trước ngày đặt.",path:["due_on"]});
- try{totals(o.items,o.shipping_vnd,o.discount_vnd,o.deposit_vnd,o.paid_vnd);}catch{c.addIssue({code:"custom",message:"Giảm giá không vượt tiền hàng; tiền cọc ≤ đã thanh toán ≤ tổng đơn.",path:["paid_vnd"]});}
+ try{totals(o.items,o.shipping_vnd,o.discount_vnd,o.deposit_vnd,o.deposit_vnd);}catch{c.addIssue({code:"custom",message:"Giảm giá không vượt tiền hàng; tiền cọc không vượt tổng đơn.",path:["deposit_vnd"]});}
 });
+export const completedPaymentSchema=z.object({id:z.uuid(),version:z.number().int().positive(),paid_vnd:money});
 export const statusSchema=z.object({id:z.uuid(),version:z.number().int().positive(),status:z.enum([...statuses,"cancelled"]),reason:z.string().trim().max(1000),confirmed:z.boolean()}).superRefine((o,c)=>{
  if(o.status==="cancelled"&&(!o.confirmed||o.reason.length<3))c.addIssue({code:"custom",message:"Cần xác nhận hủy và nhập lý do ít nhất 3 ký tự."});
 });

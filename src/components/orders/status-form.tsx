@@ -1,14 +1,15 @@
 ﻿"use client";
 import { useActionState,useEffect,useId,useLayoutEffect,useRef,useState } from "react";
 import { createPortal } from "react-dom";
-import { changeStatus,type OrderActionState } from "@/features/orders/actions";
+import { changeStatus,markOrderFullyPaid,updateCompletedPayment,type OrderActionState } from "@/features/orders/actions";
 import { statuses,statusLabels,type OrderStatus } from "@/features/orders/domain";
 import { StatusBadge } from "@/components/orders/status-badge";
 import { Button } from "@/components/ui/button";
+import { formatVnd } from "@/lib/format";
 
 const openMenuEvent="lthnk:open-order-status-menu";
 type Position={left:number;top:number;width:number;maxHeight:number};
-export function StatusForm({id,version,status,onOptimisticStatus}:{id:string;version:number;status:OrderStatus;onOptimisticStatus?:(status:OrderStatus)=>void}){
+export function StatusForm({id,version,status,onOptimisticStatus,totalVnd,paidVnd,showFullPaymentAction=false}:{id:string;version:number;status:OrderStatus;onOptimisticStatus?:(status:OrderStatus)=>void;totalVnd?:number;paidVnd?:number;showFullPaymentAction?:boolean}){
  const formId=useId();
  const triggerRef=useRef<HTMLButtonElement>(null);
  const menuRef=useRef<HTMLDivElement>(null);
@@ -19,6 +20,10 @@ export function StatusForm({id,version,status,onOptimisticStatus}:{id:string;ver
   onOptimisticStatus?.(form.get("status") as OrderStatus);
   return changeStatus(previous,form);
  },{} as OrderActionState);
+ const [paymentState,paymentAction,paymentPending]=useActionState(updateCompletedPayment,{} as OrderActionState);
+ const [fullPaymentState,fullPaymentAction,fullPaymentPending]=useActionState(markOrderFullyPaid,{} as OrderActionState);
+ const paymentInputRef=useRef<HTMLInputElement>(null);
+ useEffect(()=>{if(paymentState.success&&paymentInputRef.current)paymentInputRef.current.value="";},[paymentState]);
 
  useEffect(()=>{
   if(!open)return;
@@ -80,7 +85,7 @@ export function StatusForm({id,version,status,onOptimisticStatus}:{id:string;ver
  };
  if(status==="cancelled")return <StatusBadge status={status}/>;
  return <>
-  <form id={formId} action={action} aria-busy={pending} className="block w-full min-w-0 max-w-full space-y-2" onSubmit={()=>setOpen(false)}>
+  <form id={formId} action={action} aria-busy={pending||paymentPending||fullPaymentPending} className="block w-full min-w-0 max-w-full space-y-2" onSubmit={()=>setOpen(false)}>
    <input type="hidden" name="id" value={id}/><input type="hidden" name="version" value={version}/><input type="hidden" name="status" value={selected}/>
    <button ref={triggerRef} type="button" aria-haspopup="true" aria-expanded={open} aria-controls={open?`${formId}-menu`:undefined} onClick={toggle} disabled={pending} className="block max-w-full rounded-full text-left focus-visible:outline-2 focus-visible:outline-primary">
     <StatusBadge status={status}/>
@@ -94,6 +99,8 @@ export function StatusForm({id,version,status,onOptimisticStatus}:{id:string;ver
    {pending&&<p role="status" className="text-xs text-stone-600">Đang lưu vào hệ thống…</p>}
    {state.error&&<p role="alert" className="text-xs leading-5 text-red-800">{state.error}</p>}
    {!pending&&state.success&&<p role="status" className="text-xs text-green-800">{state.success}</p>}
+   {status==="completed"&&totalVnd!==undefined&&paidVnd!==undefined&&<div className="space-y-2 border-t border-stone-200 pt-3"><label className="block text-xs">Khách đã thanh toán thực tế (nghìn đồng)<input ref={paymentInputRef} className="field mt-1 w-full" type="number" name="paid_vnd" min={0} max={totalVnd/1000} step={1} defaultValue={paidVnd/1000}/></label><p className="text-xs text-stone-500">720 tương đương 720.000đ.</p><Button size="sm" formAction={paymentAction} disabled={paymentPending}>{paymentPending?"Đang lưu…":"Cập nhật thanh toán"}</Button>{paymentState.error&&<p role="alert" className="text-xs text-red-800">{paymentState.error}</p>}{paymentState.success&&<p role="status" className="text-xs text-green-800">{paymentState.success}</p>}</div>}
+   {showFullPaymentAction&&totalVnd!==undefined&&paidVnd!==undefined&&paidVnd<totalVnd&&<div className="space-y-1"><Button type="submit" size="sm" variant="outline" className="min-h-7 rounded-md px-2 py-1 text-xs" formAction={fullPaymentAction} disabled={fullPaymentPending} onClick={event=>{if(!window.confirm(`Xác nhận đã nhận đủ ${formatVnd(totalVnd)}? Khoản đã thanh toán và tiền cọc sẽ được cập nhật bằng tổng đơn.`))event.preventDefault();}}>{fullPaymentPending?"Đang lưu…":"Đã nhận đủ tiền"}</Button>{fullPaymentState.error&&<p role="alert" className="text-xs text-red-800">{fullPaymentState.error}</p>}{fullPaymentState.success&&<p role="status" className="text-xs text-green-800">{fullPaymentState.success}</p>}</div>}
   </form>
   {open&&typeof document!=="undefined"&&createPortal(
    <div ref={menuRef} id={`${formId}-menu`} role="group" aria-label="Thay đổi trạng thái đơn hàng" className="fixed z-[100] overflow-y-auto rounded-xl border border-stone-200 bg-white p-2 shadow-xl" style={{left:position?.left??0,top:position?.top??0,width:position?.width??288,maxHeight:position?.maxHeight??"calc(100dvh - 1rem)",visibility:position?"visible":"hidden"}}>

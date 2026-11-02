@@ -1,7 +1,6 @@
 "use client";
 import { useOptimistic } from "react";
 import Link from "next/link";
-import { NavigationLink } from "@/components/navigation-link";
 import { StatusBadge } from "@/components/orders/status-badge";
 import { StatusForm } from "@/components/orders/status-form";
 import { OrderItemsSummary } from "@/components/orders/order-items-summary";
@@ -14,7 +13,7 @@ export function OrderCard({order,canWrite}:{order:Order;canWrite:boolean}) {
  const tone=statusPresentation[status]??statusPresentation.preparing;
  return <article aria-busy={status!==order.status} className={`space-y-4 rounded-2xl border border-stone-200 p-4 ${tone.row}`}>
   <header className="flex min-w-0 items-start justify-between gap-3">
-   <div className="min-w-0"><NavigationLink href={`/orders/${order.id}`} className="break-all font-semibold text-primary underline">{order.order_code}</NavigationLink><p className="mt-1 text-xs text-stone-600">{order.ordered_on?formatDate(order.ordered_on+"T12:00:00+07:00"):"Chưa rõ ngày đặt"}</p></div>
+   <div className="min-w-0"><p className="text-xs text-stone-600">{order.ordered_on?formatDate(order.ordered_on+"T12:00:00+07:00"):"Chưa rõ ngày đặt"}</p></div>
    {!canWrite&&<StatusBadge status={status}/>}
   </header>
   <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-4 text-sm">
@@ -27,6 +26,6 @@ export function OrderCard({order,canWrite}:{order:Order;canWrite:boolean}) {
   <div className="text-sm"><span className="text-xs text-stone-500">URL người mua</span><p className="mt-1">{order.buyer_link?<a href={order.buyer_link} target="_blank" rel="noopener noreferrer" className="text-primary underline">Mở link</a>:"—"}</p></div>
   <div className="flex flex-wrap justify-between gap-3 rounded-xl bg-white/70 p-3 text-sm"><span>Tổng đơn <strong className="ml-1">{formatVnd(order.total_vnd)}</strong></span><span>Còn lại <strong>{formatVnd(order.remaining_vnd)}</strong></span></div>
   <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm"><Link href={`/orders/${order.id}`} className="underline">Chi tiết</Link>{canWrite&&order.status!=="cancelled"&&<Link href={`/orders/${order.id}/edit`} className="underline">Chỉnh sửa</Link>}</div>
-  {canWrite&&<details className="rounded-xl border border-stone-200/80 bg-white/70 p-3"><summary className="cursor-pointer text-sm font-medium">Cập nhật trạng thái</summary><div className="mt-3"><StatusForm key={order.version} id={order.id} version={order.version} status={order.status} onOptimisticStatus={updateStatus}/></div></details>}
+  {canWrite&&<details className="rounded-xl border border-stone-200/80 bg-white/70 p-3"><summary className="cursor-pointer text-sm font-medium">Cập nhật trạng thái</summary><div className="mt-3"><StatusForm key={order.version} id={order.id} version={order.version} status={order.status} onOptimisticStatus={updateStatus} totalVnd={order.total_vnd} paidVnd={order.paid_vnd} showFullPaymentAction/></div></details>}
  </article>;
 }
