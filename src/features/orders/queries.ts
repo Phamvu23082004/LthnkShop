@@ -18,8 +18,9 @@ export async function listOrders(f:Filters){
  await requirePermission("orders.read");
  if(f.error)return {orders:[] as Order[],count:0,needsMigration:false};
  const client=await createClient();
- let query=client.from("orders").select("*,order_type,sales_platform,buyer_link,order_items(product_name,variant,quantity)",{count:"exact"});
- if(f.order_type!=="all")query=query.eq("order_type",f.order_type);
+ const itemSelection=f.order_type==="all"?"order_items(product_name,variant,quantity)":"order_items(product_name,variant,quantity),matching_items:order_items!inner(product_type)";
+ let query=client.from("orders").select("*,order_type,sales_platform,buyer_link,"+itemSelection,{count:"exact"});
+ if(f.order_type!=="all")query=query.eq("matching_items.product_type",f.order_type);
  if(f.sales_platform)query=query.eq("sales_platform",f.sales_platform);
  if(f.q)query=query.ilike("search_text","%"+f.q.replace(/[\\%_]/g,"\\$&")+"%");
  if(f.status)query=query.eq("status",f.status);
