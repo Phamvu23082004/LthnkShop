@@ -94,7 +94,7 @@ export async function saveRate(_: ProductionActionState, form: FormData): Promis
   const { error } = await client.rpc("save_handmade_piece_rate", { target_id: id?.success ? id.data : null, component: component.data, selected_product: product.data, piece_size: size, rate_vnd: rate, is_active: form.get("active") === "on" });
   if (error) return { error: message(error.code) };
   revalidatePath("/employees"); revalidatePath("/");
-  return { success: "Đã lưu đơn giá. Phiếu đã duyệt vẫn giữ nguyên đơn giá cũ." };
+  return { success: "Đã lưu đơn giá. Các dòng chưa duyệt trong phiếu đang chờ sẽ dùng giá mới; dòng đã duyệt giữ nguyên giá cũ." };
 }
 
 export async function deleteRate(_: ProductionActionState, form: FormData): Promise<ProductionActionState> {
