@@ -70,6 +70,17 @@ export async function saveComponent(_: ProductionActionState, form: FormData): P
   return { success: "Đã lưu bộ phận handmade." };
 }
 
+export async function deleteComponent(_: ProductionActionState, form: FormData): Promise<ProductionActionState> {
+  await requireAdmin();
+  const id = z.uuid().safeParse(form.get("component_id"));
+  if (!id.success) return { error: "Bộ phận không hợp lệ." };
+  const client = await createClient();
+  const { data, error } = await client.rpc("delete_handmade_component", { target_component: id.data });
+  if (error) return { error: message(error.code) };
+  revalidatePath("/employees"); revalidatePath("/");
+  return { success: data === "deactivated" ? "Bộ phận đã được ẩn vì đang có dữ liệu lịch sử." : "Đã xóa bộ phận handmade." };
+}
+
 export async function saveRate(_: ProductionActionState, form: FormData): Promise<ProductionActionState> {
   await requireAdmin();
   const rawId = String(form.get("rate_id") ?? "");
@@ -84,6 +95,17 @@ export async function saveRate(_: ProductionActionState, form: FormData): Promis
   if (error) return { error: message(error.code) };
   revalidatePath("/employees"); revalidatePath("/");
   return { success: "Đã lưu đơn giá. Phiếu đã duyệt vẫn giữ nguyên đơn giá cũ." };
+}
+
+export async function deleteRate(_: ProductionActionState, form: FormData): Promise<ProductionActionState> {
+  await requireAdmin();
+  const id = z.uuid().safeParse(form.get("rate_id"));
+  if (!id.success) return { error: "Đơn giá không hợp lệ." };
+  const client = await createClient();
+  const { error } = await client.rpc("delete_handmade_piece_rate", { target_rate: id.data });
+  if (error) return { error: message(error.code) };
+  revalidatePath("/employees"); revalidatePath("/");
+  return { success: "Đã xóa đơn giá. Phiếu sản lượng cũ vẫn giữ nguyên tiền công đã chụp." };
 }
 
 export async function addPayrollEntry(_: ProductionActionState, form: FormData): Promise<ProductionActionState> {
