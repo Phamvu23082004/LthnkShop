@@ -18,3 +18,14 @@ button,a {-webkit-tap-highlight-color:transparent;}
 .field.pr-12 {padding-right:48px;}
 
 @media (max-width: 640px) { .field { font-size: 16px; } }
+
+/* Keep employee production forms and report rows inside the available phone width. */
+#reports > div { min-width: 0; }
+#reports .field.w-64 { width: min(100%, 16rem); }
+#reports li > span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  #reports .field.w-64 { width: 100%; }
+  #reports article,
+  #reports form { min-width: 0; }
+  .employee-report-form .field { min-height: 42px; padding: 8px 11px; }
+}

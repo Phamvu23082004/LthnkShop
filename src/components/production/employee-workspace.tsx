@@ -5,6 +5,7 @@ import { NavigationLink as Link } from "@/components/navigation-link";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { addPayrollEntry, deleteComponent, deleteRate, returnReport, reviewLine, saveComponent, saveRate, saveReport, type ProductionActionState } from "@/features/production/actions";
+import { addReportLine, groupReportLines, removeProductGroup, removeReportLine, serializeReportGroups, validateReportGroups, type ProductReportGroup, type ReportLineDraft } from "@/features/production/report-form";
 
 type Component = { id: string; name: string; active: boolean; sort_order: number };
 type Product = {id:string;name:string;product_type:string;active:boolean;product_variants:{id:string;product_id:string;name:string;price_vnd:number;active:boolean}[]};
@@ -15,6 +16,7 @@ type Payroll = { employee_id: string; employee_name: string; earned: string; adv
 type PayrollEntry = { id:string; employee_id:string; employee_name?:string; period_month:string; entry_type:string; amount_vnd:string|number; notes:string; created_at:string };
 type Staff = { id: string; full_name: string };
 const emptyState: ProductionActionState = {};
+const sizeOptions=["15","40","60"];
 const sizeDigits=(value:string)=>value.replace(/\D/g,"");
 const vnd = (value: string | number | bigint) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(typeof value === "bigint" ? value : BigInt(value));
 const statuses: Record<string,string> = { draft: "Bản nháp", submitted: "Chờ duyệt", returned: "Cần chỉnh sửa", approved: "Đã duyệt" };
@@ -22,26 +24,41 @@ const statuses: Record<string,string> = { draft: "Bản nháp", submitted: "Ch�
 function Feedback({state}:{state:ProductionActionState}) { return <>{state.error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}{state.success&&<p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{state.success}</p>}</>; }
 function ReportComposer({components,products,report,today}:{components:Component[];products:Product[];report?:Report;today:string}) {
  const [state,action,pending] = useActionState(saveReport,emptyState);
- const [lines,setLines] = useState<Line[]>(report?.productivity_report_lines?.map(l=>({component_id:l.component_id,product_id:l.product_id,product_name:l.product_name,component_color:l.component_color??"",size:sizeDigits(l.size),quantity:l.quantity})) ?? [{component_id:"",product_id:"",product_name:"",component_color:"",size:"",quantity:1}]);
+ const [groups,setGroups] = useState<ProductReportGroup[]>(()=>report?groupReportLines(report.productivity_report_lines.map(l=>({component_id:l.component_id,product_id:l.product_id,product_name:l.product_name,component_color:l.component_color??"",size:sizeDigits(l.size),quantity:l.quantity}))):[{key:"new-product-1",product_id:"",product_name:"",lines:[{component_id:"",product_id:"",product_name:"",component_color:"",size:"",quantity:1}]}]);
  const [date,setDate] = useState(report?.completed_on??today); const [notes,setNotes] = useState(report?.notes??"");
- const patchLine=(index:number,field:keyof Line,value:string|number)=>setLines(rows=>rows.map((line,i)=>i===index?{...line,[field]:value}:line));
- return <form action={action} className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
-  <div><h2 className="text-xl font-semibold">{report?"Chỉnh sửa báo cáo":"Báo cáo sản lượng"}</h2><p className="mt-2 text-sm text-stone-600">Một phiếu có thể ghi nhiều bộ phận, sản phẩm và kích thước.</p></div>
+ const [validationError,setValidationError] = useState("");
+ const payloadLines=serializeReportGroups(groups);
+ const patchGroup=(key:string,update:(group:ProductReportGroup)=>ProductReportGroup)=>{setValidationError("");setGroups(current=>current.map(group=>group.key===key?update(group):group));};
+ const patchLine=(groupKey:string,index:number,field:keyof ReportLineDraft,value:string|number)=>patchGroup(groupKey,group=>({...group,lines:group.lines.map((line,lineIndex)=>lineIndex===index?{...line,[field]:value}:line)}));
+ const addProduct=()=>{setValidationError("");setGroups(current=>current.length>=50?current:[...current,{key:crypto.randomUUID(),product_id:"",product_name:"",lines:[{component_id:"",product_id:"",product_name:"",component_color:"",size:"",quantity:1}]}]);};
+ const addComponent=(groupKey:string)=>{setValidationError("");setGroups(current=>addReportLine(current,groupKey,{component_id:"",product_id:"",product_name:"",component_color:"",size:"",quantity:1}));};
+ const removeComponent=(groupKey:string,index:number)=>{setValidationError("");setGroups(current=>removeReportLine(current,groupKey,index));};
+ const handleSubmit=(event:React.FormEvent<HTMLFormElement>)=>{const error=validateReportGroups(groups);if(error){event.preventDefault();setValidationError(error);}};
+ return <form action={action} onSubmit={handleSubmit} className="employee-report-form space-y-3 rounded-2xl border border-stone-200 bg-white p-3 sm:space-y-4 sm:p-6">
+  <div><h2 className="text-lg font-semibold sm:text-xl">{report?"Chỉnh sửa báo cáo":"Báo cáo sản lượng"}</h2><p className="mt-1 text-xs text-stone-600 sm:mt-2 sm:text-sm">Chọn sản phẩm, sau đó thêm các bộ phận tương ứng. Một phiếu có thể gồm nhiều sản phẩm.</p></div>
   {report&&<><input type="hidden" name="report_id" value={report.id}/><input type="hidden" name="version" value={report.version}/></>}
-  <input type="hidden" name="lines" value={JSON.stringify(lines.map(({component_id,product_id,component_color,size,quantity})=>({component_id,product_id,component_color,size,quantity})))}/>
-  <label className="grid max-w-xs gap-2 text-sm">Ngày hoàn thành<input className="field w-full min-w-0" type="date" name="completed_on" value={date} onChange={e=>setDate(e.target.value)} required/></label>
-  {lines.map((line,index)=><fieldset key={index} className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-stone-200 bg-background p-4 sm:grid-cols-2 xl:grid-cols-3"><legend className="px-2 text-xs font-semibold">Bộ phận {index+1}</legend>
-   <label className="grid min-w-0 gap-2 text-sm">Bộ phận<select className="field w-full min-w-0" value={line.component_id} onChange={e=>patchLine(index,"component_id",e.target.value)} required><option value="">Chọn bộ phận</option>{components.filter(c=>c.active||c.id===line.component_id).map(c=><option value={c.id} key={c.id}>{c.name}{!c.active?" (ngừng dùng)":""}</option>)}</select></label>
-   <label className="grid min-w-0 gap-2 text-sm">Sản phẩm<select className="field w-full min-w-0" value={line.product_id} onChange={e=>{const product=products.find(p=>p.id===e.target.value);setLines(rows=>rows.map((x,i)=>i===index?{...x,product_id:e.target.value,product_name:product?.name??""}:x));}} required><option value="">Chọn sản phẩm</option>{products.filter(p=>p.active||p.id===line.product_id).map(p=><option key={p.id} value={p.id}>{p.name}{!p.active?" (ngừng dùng)":""}</option>)}</select></label>
-   <label className="grid min-w-0 gap-2 text-sm">Màu bộ phận<input className="field w-full min-w-0" value={line.component_color} onChange={e=>patchLine(index,"component_color",e.target.value)} maxLength={100} placeholder="Nhập màu của bộ phận"/></label>
-   <label className="grid min-w-0 gap-2 text-sm">Kích thước (cm)<input className="field w-full min-w-0" value={line.size} onChange={e=>patchLine(index,"size",sizeDigits(e.target.value))} inputMode="numeric" pattern="[0-9]{1,3}" maxLength={3} placeholder="40" required/></label>
-   <label className="grid min-w-0 gap-2 text-sm">Số lượng<input className="field w-full min-w-0" type="number" min={1} max={10000} step={1} value={line.quantity} onChange={e=>patchLine(index,"quantity",e.target.valueAsNumber)} required/></label>
-   <div className="sm:col-span-2 xl:col-span-3"><Button type="button" variant="outline" size="sm" disabled={lines.length===1} onClick={()=>setLines(rows=>rows.filter((_,i)=>i!==index))}>Xóa dòng</Button></div>
-  </fieldset>)}
-  <Button type="button" variant="outline" disabled={lines.length>=50} onClick={()=>setLines(rows=>[...rows,{component_id:"",product_id:"",product_name:"",component_color:"",size:"",quantity:1}])}>+ Thêm bộ phận</Button>
-  <label className="grid min-w-0 gap-2 text-sm">Ghi chú<textarea className="field min-h-20" name="notes" value={notes} onChange={e=>setNotes(e.target.value)} maxLength={2000}/></label>
+  <input type="hidden" name="lines" value={JSON.stringify(payloadLines)}/>
+  <label className="grid max-w-xs gap-1.5 text-xs sm:gap-2 sm:text-sm">Ngày hoàn thành<input className="field w-full min-w-0" type="date" name="completed_on" value={date} onChange={e=>setDate(e.target.value)} required/></label>
+  <section className="space-y-3 sm:space-y-4">
+   <div><h3 className="font-semibold">Sản phẩm và bộ phận</h3><p className="mt-1 text-xs text-stone-500">Tối đa 50 dòng bộ phận cho mỗi báo cáo.</p></div>
+   {groups.length===0&&<p className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-stone-500">Thêm sản phẩm để bắt đầu nhập bộ phận.</p>}
+   {groups.map(group=><section key={group.key} className="min-w-0 space-y-2.5 rounded-2xl border border-stone-200 bg-[#fdfbf8] p-3 sm:space-y-3 sm:p-5">
+    <div className="flex flex-wrap items-end gap-2 sm:gap-3"><label className="grid min-w-0 flex-1 gap-1.5 text-xs font-medium sm:gap-2 sm:text-sm">Sản phẩm<select className="field w-full min-w-0" value={group.product_id} onChange={event=>{const product=products.find(item=>item.id===event.target.value);patchGroup(group.key,current=>({...current,product_id:event.target.value,product_name:product?.name??""}));}} required><option value="">Chọn sản phẩm</option>{products.filter(product=>product.active||product.id===group.product_id).map(product=><option key={product.id} value={product.id} disabled={groups.some(other=>other.key!==group.key&&other.product_id===product.id)}>{product.name}{!product.active?" (ngừng dùng)":""}</option>)}</select></label><Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={()=>{setValidationError("");setGroups(current=>removeProductGroup(current,group.key));}}>Xóa sản phẩm</Button></div>
+    {group.lines.map((line,index)=><fieldset key={`${group.key}-${index}`} className="grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-stone-200 bg-white p-3 sm:grid-cols-2 sm:gap-3 sm:p-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"><legend className="px-2 text-xs font-semibold">Bộ phận {index+1}</legend>
+     <label className="grid min-w-0 gap-1.5 text-xs sm:gap-2 sm:text-sm">Bộ phận<select className="field w-full min-w-0" value={line.component_id} onChange={event=>patchLine(group.key,index,"component_id",event.target.value)} required><option value="">Chọn bộ phận</option>{components.filter(component=>component.active||component.id===line.component_id).map(component=><option key={component.id} value={component.id}>{component.name}{!component.active?" (ngừng dùng)":""}</option>)}</select></label>
+     <label className="grid min-w-0 gap-1.5 text-xs sm:gap-2 sm:text-sm">Màu bộ phận<input className="field w-full min-w-0" value={line.component_color} onChange={event=>patchLine(group.key,index,"component_color",event.target.value)} maxLength={100} placeholder="Nhập màu bộ phận"/></label>
+     <label className="grid min-w-0 gap-1.5 text-xs sm:gap-2 sm:text-sm">Kích thước (cm)<select className="field w-full min-w-0" value={line.size} onChange={event=>patchLine(group.key,index,"size",event.target.value)} required><option value="">Chọn size</option>{Array.from(new Set([...sizeOptions,line.size].filter(Boolean))).map(size=><option key={size} value={size}>{size} cm</option>)}</select></label>
+     <label className="grid min-w-0 gap-1.5 text-xs sm:gap-2 sm:text-sm">Số lượng<input className="field w-full min-w-0" type="number" min={1} max={10000} step={1} value={line.quantity} onChange={event=>patchLine(group.key,index,"quantity",Number(event.target.value))} required/></label>
+     <div className="sm:col-span-2 xl:col-span-4"><Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={()=>removeComponent(group.key,index)}>Xóa bộ phận</Button></div>
+    </fieldset>)}
+    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" disabled={payloadLines.length>=50} onClick={()=>addComponent(group.key)}>+ Thêm bộ phận</Button>
+   </section>)}
+   <Button type="button" variant="outline" disabled={payloadLines.length>=50||groups.length>=50} onClick={addProduct}>+ Thêm sản phẩm</Button>
+  </section>
+  <label className="grid min-w-0 gap-1.5 text-xs sm:gap-2 sm:text-sm">Ghi chú chung<textarea className="field min-h-20" name="notes" value={notes} onChange={event=>setNotes(event.target.value)} maxLength={2000}/></label>
+  {validationError&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{validationError}</p>}
   {report?.status==="returned"&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Lý do trả: {report.return_reason}</p>}
-  <Feedback state={state}/><div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row"><Button className="w-full sm:w-auto" name="intent" value="draft" variant="outline" disabled={pending}>{pending?"Đang lưu…":"Lưu nháp"}</Button><Button className="w-full sm:w-auto" name="intent" value="submit" disabled={pending||components.filter(c=>c.active).length===0}>{pending?"Đang gửi…":"Gửi báo cáo"}</Button></div>
+  <Feedback state={state}/><div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row"><Button className="w-full sm:w-auto" name="intent" value="draft" variant="outline" disabled={pending}>{pending?"Đang lưu…":"Lưu nháp"}</Button><Button className="w-full sm:w-auto" name="intent" value="submit" disabled={pending}>{pending?"Đang gửi…":"Gửi báo cáo"}</Button></div>
  </form>;
 }
 
