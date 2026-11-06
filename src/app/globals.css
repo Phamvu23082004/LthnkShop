@@ -12,6 +12,11 @@ body {background:var(--background);color:var(--foreground);font-family:var(--fon
 h1,h2,h3,.font-heading {font-family:var(--font-heading),sans-serif;}
 button,a,input,select {outline-offset:4px;}
 button,a {-webkit-tap-highlight-color:transparent;}
+@media (max-width: 1023px) {
+ .field[type="date"][name="ordered_on"],
+ .field[type="date"][name="due_on"],
+ .field[type="date"][name="completed_on"] { width:10rem; max-width:100%; }
+}
 .field {width:100%;min-height:46px;border:1px solid #d4c3bb;border-radius:10px;background:#faf8f5;padding:10px 14px;font-size:14px;}
 .field:focus {outline:2px solid #8c6551;outline-offset:2px;}
 .field.pl-11 {padding-left:44px;}
